@@ -1,0 +1,363 @@
+/*
+ * Description: 
+ * This program is used to record the time couse when animal is doing an decison-making experiment.
+ * You can use any arudion modules, even the most basic one arduino UNO is fine. 
+ * 
+ * Upload the code:
+ * Connect Arduino to your laptop, if you are using Arduino UNO, use the programming port.
+ * First you need to choose the port and arduino module. Tools->Port->COM xx(Arduino Uno) && Tools->Boards->Arduino UNO (Just use Uno as an example)
+ * Press Upload on top left.
+ * Once scucced, press serial monitor at top right and change the baud rate to 115200.
+ * 
+ * Calibration:
+ * You need to do some calibration for your infrared LED and photoDiode ,generally the photoDiode is cascade with a 10M Ohm resistor and the infrared LED is cascade with 
+ * a 1K Ohm resistor,but it really depends on the size of your maze.The program will show you the value of the sensor(photoDiode) at the very beginning, if the value is 
+ * below 100, change the position of LED and photoDiode,making sure they are in the same line or increase the value of the resistor cascaded with the photoDiode.
+ * 
+ * FYI:
+ * You need to inpur an even number for the trial number, and the program will randomly generate equal number of trials for left and right side Reward
+ * Follow the indication showed during the experiment. At the end just copy the data to an Excel file and you can do the analysis.
+ * 
+ * We define the timer started when you press Enter, and time_Decision is the time course after the animal poking the LED in the middle.Time_left_1 is the LED on the  
+ * left further away from the middle, Time_left_2 is the LED on the left near to the middle, Time_right_1 is the LED on the right near to the middle, Time_right_2 is the 
+ * LED on the right further away from the middle. The unit is milisecond.
+ * 
+ * Author: Dechuan Sun  
+ * Date:   27/03/2018
+ * Email: dechuans@student.unimelb.edu.au
+ */
+
+/**************************************Infread LED and Photo Diode Definition******************************************************/
+#define decision_IL A2 
+#define left_IL_1 A1 
+#define right_IL_1 A3
+#define left_IL_2 A0 
+#define right_IL_2 A4
+
+int test_decision_IL;
+int test_left_IL_1;
+int test_right_IL_1;
+int test_left_IL_2;
+int test_right_IL_2;
+
+/*******************************************************speaker Defination*************************************************************/
+#define microphone_1 7
+#define microphone_2 8
+
+void play_Music(int speaker,int tone){
+for (long i = 0; i < 200; i += 1) {
+    digitalWrite(speaker, HIGH);
+    delayMicroseconds(tone);
+    digitalWrite(speaker, LOW);
+    delayMicroseconds(tone);
+  }
+}
+
+/*******************************************************Varible Defination*************************************************************/
+int trial_Number_Total=0;
+int trial_Number_left=0;
+int trial_Number_right=0;
+int trial_Number=0;
+
+unsigned long time_1=0;
+unsigned int trial_Array[50];
+unsigned long time_decision[50];
+unsigned long time_left_1[50];
+unsigned long time_left_2[50];
+unsigned long time_right_1[50];
+unsigned long time_right_2[50];
+
+
+/***************************************************************Setup*********************************************************************/
+void setup() { 
+  pinMode(microphone_1,OUTPUT);
+  pinMode(microphone_2,OUTPUT);
+  
+  Serial.begin(115200);
+  for(int i=0;i<50;i++){
+   time_decision[i]=0;
+   time_left_1[i]=0;
+   time_left_2[i]=0;
+   time_right_1[i]=0;
+   time_right_2[i]=0;  
+    }
+  Serial.println("Sensor Check...");
+  delay(1000);
+  test_decision_IL=analogRead(decision_IL);
+  test_left_IL_1=analogRead(left_IL_1);
+  test_right_IL_1=analogRead(right_IL_1);
+  test_left_IL_2=analogRead(left_IL_2);
+  test_right_IL_2=analogRead(right_IL_2);
+  Serial.println(test_decision_IL);
+  Serial.println( test_left_IL_1);
+  Serial.println( test_left_IL_2);
+  Serial.println(test_right_IL_1);
+  Serial.println(test_right_IL_2);
+
+  randomSeed(analogRead(5));
+
+  Serial.println("Initialization Done");
+  delay(1000);
+  Serial.println("Please input how many trials(even) do you expect in one experiment.");
+  while(true){
+    if (Serial.available() > 0) {
+    trial_Number_Total = Serial.readString().toInt();
+    break;
+        }
+    }
+
+  Serial.println("Trials are generating,please wait...");
+  delay(1000);
+   for (int i=0; i <trial_Number_Total; i++){   
+     if (trial_Number_left==trial_Number_Total/2){
+        trial_Array[i]=2;
+        trial_Number_right++;
+        if(i==trial_Number_Total-1)
+        break;
+     }
+     if (trial_Number_right==trial_Number_Total/2){
+        trial_Array[i]=1;
+        trial_Number_left++;
+     }
+     if((trial_Number_left<trial_Number_Total/2) && (trial_Number_right<trial_Number_Total/2)){
+      trial_Array[i]=random(1,3);
+      if ( trial_Array[i]==1){
+      trial_Number_left++;
+      }
+      else{
+      trial_Number_right++;
+      }
+     }
+   }
+ 
+   
+Serial.println("Your trials:");
+   for(int i=0;i<trial_Number_Total;i++){
+    if(trial_Array[i]==1){
+       Serial.print("Trial:");
+       Serial.print(i+1);
+       Serial.print(" ");
+       Serial.print("Left");
+       Serial.print("  ");
+      }
+    else{
+       Serial.print("Trial:");
+       Serial.print(i+1);
+       Serial.print(" ");
+       Serial.print("Right");
+       Serial.print("  ");       
+        }
+ }  
+Serial.println(); 
+}
+
+/***************************************************************Loop*********************************************************************/
+void loop() {
+  Serial.println();
+  Serial.print("Trial:");
+  Serial.println(trial_Number+1);
+ 
+  Serial.print("Put the reward on ");
+  if(trial_Array[trial_Number]==1)
+  Serial.println("Left");
+  else
+  Serial.println("Right");
+  Serial.println("When finished, press Enter");
+  while(true){
+     if (Serial.available() > 0) {
+          Serial.readString();
+          break;
+        }  
+    }
+  time_1=millis();
+  Serial.println("Start!");
+    
+  while(true){
+      if(analogRead(decision_IL)<(test_decision_IL-70)){
+       if(trial_Array[trial_Number]==1)
+         play_Music(microphone_1,1000);  
+       else
+         play_Music(microphone_2,800);  
+      time_decision[trial_Number]=millis()-time_1;
+      break;
+    }  
+  }
+
+  while(true){
+          if((analogRead(left_IL_1)<(test_left_IL_1-50)) && trial_Array[trial_Number]==1){
+            time_left_1[trial_Number]=millis()-time_1;
+            while(true){
+              if(analogRead(left_IL_2)<(test_left_IL_2-50)){
+                time_left_2[trial_Number]=millis()-time_1;
+                break;
+                }
+             } 
+            break;     
+      }
+          if((analogRead(left_IL_1)<(test_left_IL_1-50)) && trial_Array[trial_Number]==2){
+            time_left_1[trial_Number]=millis()-time_1;
+             while(true){
+              if(analogRead(left_IL_2)<(test_left_IL_2-50)){
+                time_left_2[trial_Number]=millis()-time_1;
+                break;
+                }
+             } 
+            break;        
+      }
+
+           if((analogRead(right_IL_1)<(test_right_IL_1-50)) && trial_Array[trial_Number]==1){
+            time_right_1[trial_Number]=millis()-time_1; 
+            while(true){
+               if(analogRead(right_IL_2)<(test_right_IL_2-50)){
+                 time_right_2[trial_Number]=millis()-time_1;
+                 break;
+                }    
+            }
+            break;
+      }
+
+           if((analogRead(right_IL_1)<(test_right_IL_1-50)) && trial_Array[trial_Number]==2){
+              time_right_1[trial_Number]=millis()-time_1;
+              while(true){
+               if(analogRead(right_IL_2)<(test_right_IL_2-50)){
+                 time_right_2[trial_Number]=millis()-time_1;
+                 break;
+                }
+             }
+            break;         
+      }   
+  }
+  
+  trial_Number++;
+  
+  if(trial_Number==trial_Number_Total){
+    Serial.println("Complete!");
+    Serial.println();
+
+    Serial.println("Trial     Reward_Side     Selected_side     Time_decision     Time_left_1     Time_left_2     Time_right_1     Time_right_2");
+    for(int i=0;i<trial_Number_Total;i++){
+      Serial.print(i+1);
+      Serial.print("          ");
+      if(trial_Array[i]==1){
+       Serial.print("Left");
+       Serial.print("             ");
+      }
+      else{
+        Serial.print("Right");
+        Serial.print("            ");
+      }
+      if(time_left_1[i]==0 && trial_Array[i]==2 ){
+       Serial.print("Correct");
+       Serial.print("            ");
+       }
+       if(time_left_1[i]==0 && trial_Array[i]==1 ){
+       Serial.print("Wrong");
+       Serial.print("              ");
+       }
+       if(time_left_1[i]!=0 && trial_Array[i]==2 ){
+       Serial.print("Wrong");
+       Serial.print("              ");
+       }
+       if(time_left_1[i]!=0 && trial_Array[i]==1 ){
+       Serial.print("Correct");
+       Serial.print("            ");
+       } 
+      
+      Serial.print(time_decision[i]);
+      unsigned long temp=0;
+      for(int j=0;j<100;j++)
+      {
+        time_decision[i]=time_decision[i]/10;
+        temp++;
+        if (time_decision[i]<1)
+        break;
+        }
+        if (temp==1)
+        Serial.print("               ");
+        else if (temp==2)
+        Serial.print("              ");
+        else if(temp==3)
+        Serial.print("             ");
+        else if (temp==4)
+        Serial.print("            ");
+        else if (temp==5)
+        Serial.print("           ");
+        else if (temp==6)
+        Serial.print("          ");
+
+      Serial.print(time_left_1[i]);
+       temp=0;
+      for(int j=0;j<100;j++)
+      {
+        time_left_1[i]=time_left_1[i]/10;
+        temp++;
+        if (time_left_1[i]<1)
+        break;
+        }
+        if (temp==1)
+        Serial.print("               ");
+        else if (temp==2)
+        Serial.print("              ");
+        else if(temp==3)
+        Serial.print("             ");
+        else if (temp==4)
+        Serial.print("            ");
+        else if (temp==5)
+        Serial.print("           ");
+        else if (temp==6)
+        Serial.print("          ");
+
+
+      
+      Serial.print(time_left_2[i]);
+       temp=0;
+      for(int j=0;j<100;j++)
+      {
+        time_left_2[i]=time_left_2[i]/10;
+        temp++;
+        if (time_left_2[i]<1)
+        break;
+        }
+        if (temp==1)
+        Serial.print("              ");
+        else if (temp==2)
+        Serial.print("             ");
+        else if(temp==3)
+        Serial.print("            ");
+        else if (temp==4)
+        Serial.print("           ");
+        else if (temp==5)
+        Serial.print("          ");
+        else if (temp==6)
+        Serial.print("         ");
+        
+      Serial.print(time_right_1[i]);
+       temp=0;
+      for(int j=0;j<100;j++)
+      {
+        time_right_1[i]=time_right_1[i]/10;
+        temp++;
+        if (time_right_1[i]<1)
+        break;
+        }
+        if (temp==1)
+        Serial.print("                ");
+        else if (temp==2)
+        Serial.print("               ");
+        else if(temp==3)
+        Serial.print("              ");
+        else if (temp==4)
+        Serial.print("             ");
+        else if (temp==5)
+        Serial.print("            ");
+        else if (temp==6)
+        Serial.print("           ");
+        
+      Serial.print(time_right_2[i]); 
+      Serial.println();
+      }  
+     while(true){
+    }
+  }
+  
+}
